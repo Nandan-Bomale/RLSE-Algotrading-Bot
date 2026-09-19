@@ -1,0 +1,172 @@
+import time
+import MetaTrader5 as mt5
+from config import ACCOUNT_ID, PASSWORD, SERVER, SYMBOLS
+import mt5_engine
+import journal
+from strategy import SweepStrategy
+import server
+
+def main():
+    print("========================================")
+    print("   LIQUIDITY SWEEP MT5 BOT STARTED      ")
+    print("========================================")
+    
+    # 1. Initialize MT5
+    if not mt5_engine.initialize(ACCOUNT_ID, PASSWORD, SERVER):
+        print("Exiting...")
+        return
+        
+    # Start the Dashboard Web Server
+    server.run_server()
+    print("🌐 Live Dashboard running at: http://localhost:5000")
+    
+    # 2. Initialize Journal
+    journal.init_journal()
+    
+    # 3. Setup Strategies per symbol
+    active_strategies = {}
+    
+    for symbol, params in SYMBOLS.items():
+        if params['enabled']:
+            # Ensure symbol is selected in Market Watch
+            mt5.symbol_select(symbol, True)
+            
+            pdh, pdl = mt5_engine.get_daily_high_low(symbol)
+            if pdh is None or pdl is None:
+                print(f"[{symbol}] Failed to get Daily High/Low. Skipping.")
+                continue
+                
+            # Fetch TODAY's High/Low so far to handle mid-day bot starts
+            rates_today = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, 1)
+            if rates_today is not None and len(rates_today) > 0:
+                today_high = rates_today[0]['high']
+                today_low = rates_today[0]['low']
+                
+                # If today's price already broke the PDH earlier, the new target is today's absolute high
+                active_high = today_high if today_high > pdh else pdh
+                # Same for the low
+                active_low = today_low if today_low < pdl else pdl
+            else:
+                active_high = pdh
+                active_low = pdl
+                
+            print(f"[{symbol}] Initialized. PDH: {pdh} | PDL: {pdl} | Active High Target: {active_high} | Active Low Target: {active_low}")
+            active_strategies[symbol] = SweepStrategy(symbol, active_high, active_low, params['sl_buffer'])
+
+    if not active_strategies:
+        print("No active symbols configured or loaded. Exiting...")
+        mt5.shutdown()
+        return
+
+    print("\nBot is now actively monitoring ticks and 1m candles. Press Ctrl+C to stop.")
+    
+    # 4. Main Loop
+    try:
+        while True:
+            for symbol, strategy in active_strategies.items():
+                # Get current bid/ask for sweep tracking
+                tick = mt5.symbol_info_tick(symbol)
+                if tick is None:
+                    continue
+                    
+                current_price = tick.bid # Using bid price for tracking
+                
+                # Get last few 1m candles for confirmation
+                df_1m = mt5_engine.get_last_closed_candles(symbol, count=5)
+                if df_1m is None:
+                    continue
+                
+                # Pull live parameter updates from dashboard if any
+                if "updates" in server.SHARED_STATE and symbol in server.SHARED_STATE["updates"]:
+                    new_params = server.SHARED_STATE["updates"][symbol]
+                    if "sl_buffer" in new_params:
+                        strategy.sl_buffer = new_params["sl_buffer"]
+                    if "lot_size" in new_params:
+                        SYMBOLS[symbol]["lot_size"] = new_params["lot_size"]
+                    del server.SHARED_STATE["updates"][symbol]
+                    print(f"[{symbol}] ⚙️ Live parameters updated: SL Buffer = {strategy.sl_buffer}, Lot Size = {SYMBOLS[symbol]['lot_size']}")
+
+                # Update strategy state
+                signal = strategy.update(current_price, df_1m)
+                
+                # Push real-time targets to dashboard server
+                server.SHARED_STATE["targets"][symbol] = {
+                    "pdh": strategy.pdh,
+                    "pdl": strategy.pdl,
+                    "active_high": strategy.active_high_target,
+                    "active_low": strategy.active_low_target,
+                    "sweep_high_active": strategy.sweep_high_active,
+                    "sweep_low_active": strategy.sweep_low_active
+                }
+                
+                if signal:
+                    execute_trades_for_signal(symbol, signal, SYMBOLS[symbol])
+                    
+            # Wait 1 second before checking again
+            time.sleep(1)
+            
+    except KeyboardInterrupt:
+        print("\nBot stopped by user.")
+    finally:
+        mt5.shutdown()
+
+def execute_trades_for_signal(symbol, signal, config):
+    action = signal['action']
+    sl = signal['sl']
+    runner_tp = signal['tp_target']
+    
+    lot_size = config['lot_size']
+    magic = config['magic_number']
+    
+    # Get current entry price (Bid for Short, Ask for Long)
+    tick = mt5.symbol_info_tick(symbol)
+    entry_price = tick.bid if action == "SHORT" else tick.ask
+    
+    # Calculate Risk (Distance between Entry and SL)
+    risk = abs(entry_price - sl)
+    if risk == 0:
+        print(f"[{symbol}] Risk is 0, skipping trade.")
+        return
+        
+    # Calculate TPs
+    if action == "SHORT":
+        tp1 = entry_price - risk           # 1:1 RR
+        tp2 = entry_price - (2 * risk)     # 1:2 RR
+        order_type = mt5.ORDER_TYPE_SELL
+    else:
+        tp1 = entry_price + risk           # 1:1 RR
+        tp2 = entry_price + (2 * risk)     # 1:2 RR
+        order_type = mt5.ORDER_TYPE_BUY
+
+    print(f"\n==============================")
+    print(f"EXECUTING {action} ON {symbol}")
+    print(f"Entry: {entry_price} | SL: {sl}")
+    print(f"TP1: {tp1} | TP2: {tp2} | TP3(Runner): {runner_tp}")
+    
+    # Open 3 separate positions
+    trades = [
+        {"name": "TP1", "tp": tp1},
+        {"name": "TP2", "tp": tp2},
+        {"name": "Runner", "tp": runner_tp}
+    ]
+    
+    for t in trades:
+        res = mt5_engine.execute_trade(
+            symbol=symbol,
+            order_type=order_type,
+            lots=lot_size,
+            sl=sl,
+            tp=t['tp'],
+            magic=magic,
+            comment=f"Sweep {t['name']}"
+        )
+        
+        status = "SUCCESS" if res and res.retcode == mt5.TRADE_RETCODE_DONE else "FAILED"
+        
+        # Log to journal
+        journal.log_trade(symbol, action, lot_size, entry_price, sl, t['tp'], status)
+        
+    print(f"==============================\n")
+
+if __name__ == "__main__":
+    main()
