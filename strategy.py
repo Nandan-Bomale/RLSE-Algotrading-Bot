@@ -55,81 +55,105 @@ class SweepStrategy:
                 self.current_swing_low = current_price
                 self.low_candle_time = current_candle_time
 
-        # 2. Check 2-candle confirmation if a sweep is active
+        # 2. Check confirmation patterns if a sweep is active
         c2 = df_1m.iloc[-2] # Last fully closed candle
         c1 = df_1m.iloc[-3] # The candle before it
         c0 = df_1m.iloc[-4] # The candle before that
+        cp = df_1m.iloc[-5] if len(df_1m) >= 5 else c0 # Candle before c0
         
         # Only evaluate the pattern once per closed candle
         if self.last_checked_candle_time != c2['time']:
             self.last_checked_candle_time = c2['time']
             
+            is_c0_red = c0['close'] < c0['open']
             is_c1_red = c1['close'] < c1['open']
             is_c2_red = c2['close'] < c2['open']
             
+            is_c0_green = c0['close'] > c0['open']
             is_c1_green = c1['close'] > c1['open']
             is_c2_green = c2['close'] > c2['open']
             
             # Short Setup (After High Sweep)
             if self.sweep_high_active:
-                # Did we get the 2 Red Candle pattern?
-                if is_c1_red and is_c2_red and (c2['close'] < c1['low']):
-                    # Yes! But was it an immediate V-Shape reversal?
-                    if self.high_candle_time in [c0['time'], c1['time']]:
-                        print(f"[{self.symbol}] 🎯 SHORT Setup Confirmed! (Immediate V-Shape 2 Red Candles)")
-                        
-                        sl = self.current_swing_high + self.sl_buffer
-                        signal = {
-                            "action": "SHORT",
-                            "sl": sl,
-                            "tp_target": self.active_low_target # The runner TP
-                        }
-                        
-                        # Reset state for the NEXT potential swing high
-                        self.active_high_target = self.current_swing_high
-                        self.sweep_high_active = False
-                        self.current_swing_high = 0.0 
-                    else:
-                        print(f"[{self.symbol}] ❌ Sweep rejected (Sideways/Too Late). Target updated to {self.current_swing_high}")
-                        self.active_high_target = self.current_swing_high
-                        self.sweep_high_active = False
-                        self.current_swing_high = 0.0
+                # Pattern 1: 2 Continuous Red Candles
+                pattern_1_short = is_c1_red and is_c2_red and (c2['close'] < c1['low'])
+                
+                # Pattern 2: Red -> Green -> Red (Engulfing lows)
+                pattern_2_short = is_c0_red and is_c1_green and is_c2_red and (c2['close'] < min(c0['low'], c1['low']))
+                
+                if pattern_1_short and self.high_candle_time in [c0['time'], c1['time']]:
+                    print(f"[{self.symbol}] 🎯 SHORT Setup Confirmed! (Immediate V-Shape 2 Red Candles)")
+                    
+                    sl = self.current_swing_high + self.sl_buffer
+                    signal = {
+                        "action": "SHORT",
+                        "sl": sl,
+                        "tp_target": self.active_low_target
+                    }
+                    self.active_high_target = self.current_swing_high
+                    self.sweep_high_active = False
+                    self.current_swing_high = 0.0 
+                    
+                elif pattern_2_short and self.high_candle_time in [cp['time'], c0['time'], c1['time']]:
+                    print(f"[{self.symbol}] 🎯 SHORT Setup Confirmed! (Red-Green-Red Engulfing Pattern)")
+                    
+                    sl = self.current_swing_high + self.sl_buffer
+                    signal = {
+                        "action": "SHORT",
+                        "sl": sl,
+                        "tp_target": self.active_low_target
+                    }
+                    self.active_high_target = self.current_swing_high
+                    self.sweep_high_active = False
+                    self.current_swing_high = 0.0
+                    
                 else:
-                    # Pattern not found yet. Has it been too long since the high?
-                    if self.high_candle_time is not None and self.high_candle_time < c0['time']:
-                        print(f"[{self.symbol}] ❌ Sweep timed out (No immediate red candles). Target updated to {self.current_swing_high}")
+                    # Timeout logic. 
+                    # If high was older than cp, it's definitively too late.
+                    if self.high_candle_time is not None and self.high_candle_time < cp['time']:
+                        print(f"[{self.symbol}] ❌ Sweep timed out (No valid pattern). Target updated to {self.current_swing_high}")
                         self.active_high_target = self.current_swing_high
                         self.sweep_high_active = False
                         self.current_swing_high = 0.0
             
             # Long Setup (After Low Sweep)
             if self.sweep_low_active:
-                # Did we get the 2 Green Candle pattern?
-                if is_c1_green and is_c2_green and (c2['close'] > c1['high']):
-                    # Yes! But was it an immediate V-Shape reversal?
-                    if self.low_candle_time in [c0['time'], c1['time']]:
-                        print(f"[{self.symbol}] 🎯 LONG Setup Confirmed! (Immediate V-Shape 2 Green Candles)")
-                        
-                        sl = self.current_swing_low - self.sl_buffer
-                        signal = {
-                            "action": "LONG",
-                            "sl": sl,
-                            "tp_target": self.active_high_target # The runner TP
-                        }
-                        
-                        # Reset state for the NEXT potential swing low
-                        self.active_low_target = self.current_swing_low
-                        self.sweep_low_active = False
-                        self.current_swing_low = float('inf') 
-                    else:
-                        print(f"[{self.symbol}] ❌ Sweep rejected (Sideways/Too Late). Target updated to {self.current_swing_low}")
-                        self.active_low_target = self.current_swing_low
-                        self.sweep_low_active = False
-                        self.current_swing_low = float('inf')
+                # Pattern 1: 2 Continuous Green Candles
+                pattern_1_long = is_c1_green and is_c2_green and (c2['close'] > c1['high'])
+                
+                # Pattern 2: Green -> Red -> Green (Engulfing highs)
+                pattern_2_long = is_c0_green and is_c1_red and is_c2_green and (c2['close'] > max(c0['high'], c1['high']))
+                
+                if pattern_1_long and self.low_candle_time in [c0['time'], c1['time']]:
+                    print(f"[{self.symbol}] 🎯 LONG Setup Confirmed! (Immediate V-Shape 2 Green Candles)")
+                    
+                    sl = self.current_swing_low - self.sl_buffer
+                    signal = {
+                        "action": "LONG",
+                        "sl": sl,
+                        "tp_target": self.active_high_target
+                    }
+                    self.active_low_target = self.current_swing_low
+                    self.sweep_low_active = False
+                    self.current_swing_low = float('inf') 
+                    
+                elif pattern_2_long and self.low_candle_time in [cp['time'], c0['time'], c1['time']]:
+                    print(f"[{self.symbol}] 🎯 LONG Setup Confirmed! (Green-Red-Green Engulfing Pattern)")
+                    
+                    sl = self.current_swing_low - self.sl_buffer
+                    signal = {
+                        "action": "LONG",
+                        "sl": sl,
+                        "tp_target": self.active_high_target
+                    }
+                    self.active_low_target = self.current_swing_low
+                    self.sweep_low_active = False
+                    self.current_swing_low = float('inf')
+                    
                 else:
-                    # Pattern not found yet. Has it been too long since the low?
-                    if self.low_candle_time is not None and self.low_candle_time < c0['time']:
-                        print(f"[{self.symbol}] ❌ Sweep timed out (No immediate green candles). Target updated to {self.current_swing_low}")
+                    # Timeout logic
+                    if self.low_candle_time is not None and self.low_candle_time < cp['time']:
+                        print(f"[{self.symbol}] ❌ Sweep timed out (No valid pattern). Target updated to {self.current_swing_low}")
                         self.active_low_target = self.current_swing_low
                         self.sweep_low_active = False
                         self.current_swing_low = float('inf')
