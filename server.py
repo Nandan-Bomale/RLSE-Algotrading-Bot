@@ -133,13 +133,42 @@ def api_close_all():
                 
     return jsonify({"success": True, "closed": closed})
 
+@app.route('/api/settings')
+def api_get_settings():
+    import json
+    settings_path = os.path.join(BASE_DIR, 'settings.json')
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, 'r') as f:
+                return jsonify(json.load(f))
+        except: pass
+    return jsonify({})
+
 @app.route('/api/update_settings', methods=['POST'])
 def api_update_settings():
+    import json
     data = request.json
     if "updates" not in SHARED_STATE:
         SHARED_STATE["updates"] = {}
     for symbol, params in data.items():
         SHARED_STATE["updates"][symbol] = params
+    
+    # Save to file
+    settings_path = os.path.join(BASE_DIR, 'settings.json')
+    current_settings = {}
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, 'r') as f:
+                current_settings = json.load(f)
+        except: pass
+    
+    for symbol, params in data.items():
+        if symbol not in current_settings: current_settings[symbol] = {}
+        current_settings[symbol].update(params)
+        
+    with open(settings_path, 'w') as f:
+        json.dump(current_settings, f, indent=4)
+        
     return jsonify({"success": True})
 
 def run_server():

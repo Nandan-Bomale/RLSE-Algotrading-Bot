@@ -7,6 +7,19 @@ from strategy import SweepStrategy
 import server
 
 def main():
+    import json, os
+    settings_path = 'settings.json'
+    if os.path.exists(settings_path):
+        try:
+            with open(settings_path, 'r') as f:
+                saved_settings = json.load(f)
+                for sym, params in saved_settings.items():
+                    if sym in SYMBOLS:
+                        SYMBOLS[sym].update(params)
+                        print(f"Loaded saved settings for {sym}: {params}")
+        except Exception as e:
+            print("Failed to load settings.json:", e)
+            
     print("========================================")
     print("   LIQUIDITY SWEEP MT5 BOT STARTED      ")
     print("========================================")
@@ -81,8 +94,15 @@ def main():
                     new_params = server.SHARED_STATE["updates"][symbol]
                     if "sl_buffer" in new_params:
                         strategy.sl_buffer = new_params["sl_buffer"]
+                        SYMBOLS[symbol]["sl_buffer"] = new_params["sl_buffer"]
                     if "lot_size" in new_params:
                         SYMBOLS[symbol]["lot_size"] = new_params["lot_size"]
+                    if "tp1" in new_params:
+                        SYMBOLS[symbol]["tp1"] = new_params["tp1"]
+                    if "tp2" in new_params:
+                        SYMBOLS[symbol]["tp2"] = new_params["tp2"]
+                    if "tp3" in new_params:
+                        SYMBOLS[symbol]["tp3"] = new_params["tp3"]
                     del server.SHARED_STATE["updates"][symbol]
                     print(f"[{symbol}] ⚙️ Live parameters updated: SL Buffer = {strategy.sl_buffer}, Lot Size = {SYMBOLS[symbol]['lot_size']}")
 
@@ -128,26 +148,37 @@ def execute_trades_for_signal(symbol, signal, config):
         print(f"[{symbol}] Risk is 0, skipping trade.")
         return
         
-    # Calculate TPs
-    if action == "SHORT":
-        tp1 = entry_price - risk           # 1:1 RR
-        tp2 = entry_price - (2 * risk)     # 1:2 RR
-        order_type = mt5.ORDER_TYPE_SELL
-    else:
-        tp1 = entry_price + risk           # 1:1 RR
-        tp2 = entry_price + (2 * risk)     # 1:2 RR
-        order_type = mt5.ORDER_TYPE_BUY
+    # Read TP Configs (Default to old behavior if not set)
+    rr_tp1 = config.get('tp1', 1.0)
+    rr_tp2 = config.get('tp2', 2.0)
+    rr_tp3 = config.get('tp3', 0.0)
+        
+    # Helper to calculate TP price
+    def get_tp(rr_multiplier):
+        if rr_multiplier == 0.0:
+            return runner_tp
+        if action == "SHORT":
+            return entry_price - (risk * float(rr_multiplier))
+        else:
+            return entry_price + (risk * float(rr_multiplier))
+
+    tp1 = get_tp(rr_tp1)
+    tp2 = get_tp(rr_tp2)
+    tp3 = get_tp(rr_tp3)
+    
+    order_type = mt5.ORDER_TYPE_SELL if action == "SHORT" else mt5.ORDER_TYPE_BUY
 
     print(f"\n==============================")
+
     print(f"EXECUTING {action} ON {symbol}")
     print(f"Entry: {entry_price} | SL: {sl}")
-    print(f"TP1: {tp1} | TP2: {tp2} | TP3(Runner): {runner_tp}")
+    print(f"TP1: {tp1} | TP2: {tp2} | TP3: {tp3}")
     
     # Open 3 separate positions
     trades = [
         {"name": "TP1", "tp": tp1},
         {"name": "TP2", "tp": tp2},
-        {"name": "Runner", "tp": runner_tp}
+        {"name": "TP3", "tp": tp3}
     ]
     
     for t in trades:
@@ -162,11 +193,10 @@ def execute_trades_for_signal(symbol, signal, config):
         )
         
         status = "SUCCESS" if res and res.retcode == mt5.TRADE_RETCODE_DONE else "FAILED"
-        
-        # Log to journal
         journal.log_trade(symbol, action, lot_size, entry_price, sl, t['tp'], status)
         
     print(f"==============================\n")
+
 
 if __name__ == "__main__":
     main()
