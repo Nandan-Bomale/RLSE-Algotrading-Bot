@@ -171,6 +171,103 @@ def api_update_settings():
         
     return jsonify({"success": True})
 
+@app.route('/api/accounts', methods=['GET'])
+def api_get_accounts():
+    import json
+    accounts_path = os.path.join(BASE_DIR, 'accounts.json')
+    if os.path.exists(accounts_path):
+        try:
+            with open(accounts_path, 'r') as f:
+                return jsonify(json.load(f))
+        except: pass
+    
+    # If no accounts.json, return config.py default as active
+    import config
+    return jsonify({
+        "active": config.ACCOUNT_ID,
+        "saved": [{"id": config.ACCOUNT_ID, "password": "HIDDEN", "server": config.SERVER, "name": "Default config.py"}]
+    })
+
+@app.route('/api/accounts/add', methods=['POST'])
+def api_add_account():
+    import json
+    data = request.json
+    
+    # Validate data
+    if not data.get("id") or not data.get("password") or not data.get("server"):
+        return jsonify({"success": False, "error": "Missing fields"})
+        
+    accounts_path = os.path.join(BASE_DIR, 'accounts.json')
+    acc_data = {"active": None, "saved": []}
+    if os.path.exists(accounts_path):
+        try:
+            with open(accounts_path, 'r') as f:
+                acc_data = json.load(f)
+        except: pass
+    else:
+        import config
+        acc_data = {
+            "active": config.ACCOUNT_ID,
+            "saved": [{"id": config.ACCOUNT_ID, "password": config.PASSWORD, "server": config.SERVER, "name": "Default config.py"}]
+        }
+        
+    # Check if already exists
+    for acc in acc_data["saved"]:
+        if acc["id"] == int(data["id"]):
+            return jsonify({"success": False, "error": "Account ID already exists."})
+            
+    # Add new account
+    acc_data["saved"].append({
+        "id": int(data["id"]),
+        "password": data["password"],
+        "server": data["server"],
+        "name": data.get("name", f"Account {data['id']}")
+    })
+    
+    with open(accounts_path, 'w') as f:
+        json.dump(acc_data, f, indent=4)
+    return jsonify({"success": True})
+
+@app.route('/api/accounts/switch', methods=['POST'])
+def api_switch_account():
+    import json
+    data = request.json
+    acc_id = int(data.get("id"))
+    
+    accounts_path = os.path.join(BASE_DIR, 'accounts.json')
+    acc_data = None
+    if os.path.exists(accounts_path):
+        try:
+            with open(accounts_path, 'r') as f:
+                acc_data = json.load(f)
+        except: pass
+    
+    if not acc_data:
+        import config
+        acc_data = {
+            "active": config.ACCOUNT_ID,
+            "saved": [{"id": config.ACCOUNT_ID, "password": config.PASSWORD, "server": config.SERVER, "name": "Default config.py"}]
+        }
+        
+    try:
+        target_acc = next((a for a in acc_data["saved"] if a["id"] == acc_id), None)
+        if target_acc:
+            import MetaTrader5 as mt5
+            authorized = mt5.login(target_acc["id"], password=target_acc["password"], server=target_acc["server"])
+            if authorized:
+                acc_data["active"] = target_acc["id"]
+                with open(accounts_path, 'w') as f:
+                    json.dump(acc_data, f, indent=4)
+                
+                SHARED_STATE["account_switched"] = True
+                return jsonify({"success": True})
+            else:
+                return jsonify({"success": False, "error": f"MT5 Login failed. Code: {mt5.last_error()}"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+            
+    return jsonify({"success": False, "error": "Account not found in accounts.json. Try adding it first."})
+
 def run_server():
     import logging
     log = logging.getLogger('werkzeug')

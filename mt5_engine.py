@@ -37,7 +37,7 @@ def get_last_closed_candles(symbol, timeframe=mt5.TIMEFRAME_M1, count=5):
     df['time'] = pd.to_datetime(df['time'], unit='s')
     return df
 
-def execute_trade(symbol, order_type, lots, sl, tp, magic, comment="Liquidity Sweep"):
+def execute_trade(symbol, order_type, lots, sl, tp, magic, comment="RLSE Algo"):
     """Executes a market order with SL and TP."""
     symbol_info = mt5.symbol_info(symbol)
     if symbol_info is None:

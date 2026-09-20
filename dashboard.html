@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Liquidity Sweep Bot Dashboard</title>
+<title>RLSE Algotrading Bot Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
@@ -933,8 +933,8 @@ tbody tr:hover td {
   <div class="sidebar-brand">
     <div class="sidebar-logo">🏆</div>
     <div>
-      <div class="sidebar-title">Liquidity Sweep Bot</div>
-      <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">PDH / PDL Hunter</div>
+      <div class="sidebar-title">RLSE Algotrading Bot</div>
+      <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Advanced Trading System</div>
       
     </div>
   </div>
@@ -946,6 +946,7 @@ tbody tr:hover td {
     <a class="sidebar-link" onclick="switchTab('calendar')"><i data-lucide="calendar"></i>Trading Calendar</a>
     <a class="sidebar-link" onclick="switchTab('news')"><i data-lucide="calendar-days"></i>Economic Calendar</a>
     <a class="sidebar-link" onclick="switchTab('settings')"><i data-lucide="sliders"></i>Bot Settings</a>
+        <a class="sidebar-link" onclick="switchTab('accounts')"><i data-lucide="users"></i>Accounts</a>
     <a class="sidebar-link" onclick="switchTab('xm')"><i data-lucide="globe"></i>XM Member Portal</a>
   </div>
 
@@ -1429,6 +1430,57 @@ tbody tr:hover td {
               Update Live Parameters
             </button>
             <span id="settings-status" class="settings-status-msg" style="color:var(--accent-emerald)"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+        <!-- TAB 7: ACCOUNTS -->
+    <div id="tab-accounts" class="tab-content-panel" style="display:none">
+      <div style="max-width: 900px; margin: 0 auto;">
+        <div class="settings-form-container">
+          <div class="settings-header">
+            <h2>Account Manager</h2>
+            <p>Dynamically switch between MT5 trading accounts on the fly.</p>
+          </div>
+          
+          <div class="settings-grid" style="margin-top:20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            
+            <!-- Add Account Form -->
+            <div style="border:1px solid var(--accent-indigo); padding:15px; border-radius: 8px;">
+              <h3 style="color:var(--accent-indigo); margin-top:0;">Add New Account</h3>
+              
+              <div style="margin-bottom:10px;">
+                <label style="color:#aaa; font-size:12px; display:block; margin-bottom:4px;">Account Name (Label)</label>
+                <input type="text" id="acc-name" placeholder="e.g. Prop Firm 1" style="background:rgba(0,0,0,0.5); border:1px solid #333; padding:8px; color:#fff; width:100%; box-sizing:border-box;">
+              </div>
+              <div style="margin-bottom:10px;">
+                <label style="color:#aaa; font-size:12px; display:block; margin-bottom:4px;">Account ID</label>
+                <input type="number" id="acc-id" placeholder="12345678" style="background:rgba(0,0,0,0.5); border:1px solid #333; padding:8px; color:#fff; width:100%; box-sizing:border-box;">
+              </div>
+              <div style="margin-bottom:10px;">
+                <label style="color:#aaa; font-size:12px; display:block; margin-bottom:4px;">Password</label>
+                <input type="password" id="acc-pass" placeholder="Password" style="background:rgba(0,0,0,0.5); border:1px solid #333; padding:8px; color:#fff; width:100%; box-sizing:border-box;">
+              </div>
+              <div style="margin-bottom:15px;">
+                <label style="color:#aaa; font-size:12px; display:block; margin-bottom:4px;">Server Name</label>
+                <input type="text" id="acc-server" placeholder="XMGlobal-MT5 7" style="background:rgba(0,0,0,0.5); border:1px solid #333; padding:8px; color:#fff; width:100%; box-sizing:border-box;">
+              </div>
+              
+              <button onclick="addAccount()" class="action-btn" style="padding: 8px 16px; width:100%; font-size: 14px; background:var(--accent-indigo); color:#fff; border:none; border-radius:5px; cursor:pointer;">
+                Save Account
+              </button>
+              <div id="acc-add-status" style="margin-top:10px; font-size:12px; text-align:center;"></div>
+            </div>
+
+            <!-- Saved Accounts List -->
+            <div style="border:1px solid var(--accent-cyan); padding:15px; border-radius: 8px; max-height: 400px; overflow-y: auto;">
+              <h3 style="color:var(--accent-cyan); margin-top:0;">Saved Accounts</h3>
+              <div id="accounts-list">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -2980,6 +3032,107 @@ async function saveJournalEntry() {
   });
 
 
+
+
+// --- Account Manager ---
+async function loadAccounts() {
+    try {
+        const res = await fetch('/api/accounts');
+        const data = await res.json();
+        const listDiv = document.getElementById('accounts-list');
+        listDiv.innerHTML = '';
+        
+        if (data.saved && data.saved.length > 0) {
+            data.saved.forEach(acc => {
+                const isActive = acc.id === data.active;
+                const borderCol = isActive ? 'var(--accent-emerald)' : '#333';
+                const bg = isActive ? 'rgba(16,185,129,0.1)' : 'rgba(0,0,0,0.3)';
+                const btn = isActive 
+                    ? `<span style="color:var(--accent-emerald); font-size:12px; font-weight:bold;">ACTIVE</span>`
+                    : `<button onclick="switchAccount(${acc.id})" style="padding:4px 10px; background:var(--accent-cyan); color:#000; border:none; border-radius:3px; cursor:pointer; font-size:11px; font-weight:bold;">Switch</button>`;
+                
+                listDiv.innerHTML += `
+                <div style="border:1px solid ${borderCol}; background:${bg}; padding:10px; margin-bottom:10px; border-radius:5px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="color:#fff; font-size:14px; font-weight:bold;">${acc.name}</div>
+                        <div style="color:#aaa; font-size:11px;">ID: ${acc.id}</div>
+                        <div style="color:#888; font-size:10px;">${acc.server}</div>
+                    </div>
+                    <div>
+                        ${btn}
+                    </div>
+                </div>`;
+            });
+        } else {
+            listDiv.innerHTML = '<div style="color:#888; font-size:13px;">No accounts saved yet.</div>';
+        }
+    } catch(e) {
+        console.error("Failed to load accounts:", e);
+    }
+}
+
+async function addAccount() {
+    const status = document.getElementById('acc-add-status');
+    const name = document.getElementById('acc-name').value;
+    const id = document.getElementById('acc-id').value;
+    const password = document.getElementById('acc-pass').value;
+    const server = document.getElementById('acc-server').value;
+    
+    if(!id || !password || !server) {
+        status.innerText = "Please fill ID, Password, and Server.";
+        status.style.color = "red";
+        return;
+    }
+    
+    try {
+        const res = await fetch('/api/accounts/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name, id: id, password: password, server: server})
+        });
+        const data = await res.json();
+        if(data.success) {
+            status.innerText = "Account added successfully!";
+            status.style.color = "var(--accent-emerald)";
+            document.getElementById('acc-name').value = '';
+            document.getElementById('acc-id').value = '';
+            document.getElementById('acc-pass').value = '';
+            document.getElementById('acc-server').value = '';
+            loadAccounts();
+        } else {
+            status.innerText = data.error || "Failed to add account.";
+            status.style.color = "red";
+        }
+    } catch(e) {
+        status.innerText = "Server error.";
+        status.style.color = "red";
+    }
+    setTimeout(() => { status.innerText = ''; }, 3000);
+}
+
+async function switchAccount(accId) {
+    if(!confirm("Are you sure you want to switch accounts? This will log out of the current MT5 session instantly.")) return;
+    
+    try {
+        const res = await fetch('/api/accounts/switch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: accId})
+        });
+        const data = await res.json();
+        if(data.success) {
+            alert("Successfully switched MT5 Account!");
+            loadAccounts();
+        } else {
+            alert("Failed to switch: " + data.error);
+        }
+    } catch(e) {
+        alert("Server error during switch.");
+    }
+}
+
+loadAccounts();
+// --- End Account Manager ---
 
 // --- Load Settings ---
 async function loadSettings() {

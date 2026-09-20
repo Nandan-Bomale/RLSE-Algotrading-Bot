@@ -21,13 +21,30 @@ def main():
             print("Failed to load settings.json:", e)
             
     print("========================================")
-    print("   LIQUIDITY SWEEP MT5 BOT STARTED      ")
+    print("   RLSE ALGOTRADING BOT STARTED      ")
     print("========================================")
     
-    # 1. Initialize MT5
-    if not mt5_engine.initialize(ACCOUNT_ID, PASSWORD, SERVER):
-        print("Exiting...")
-        return
+        # 1. Initialize MT5 (Check accounts.json first, fallback to config)
+    accounts_path = 'accounts.json'
+    active_acc = None
+    if os.path.exists(accounts_path):
+        try:
+            with open(accounts_path, 'r') as f:
+                acc_data = json.load(f)
+                active_id = acc_data.get('active')
+                if active_id:
+                    active_acc = next((a for a in acc_data.get('saved', []) if a['id'] == active_id), None)
+        except: pass
+        
+    if active_acc:
+        if not mt5_engine.initialize(active_acc['id'], active_acc['password'], active_acc['server']):
+            print("Exiting...")
+            return
+    else:
+        # Fallback to config.py
+        if not mt5_engine.initialize(ACCOUNT_ID, PASSWORD, SERVER):
+            print("Exiting...")
+            return
         
     # Start the Dashboard Web Server
     server.run_server()
