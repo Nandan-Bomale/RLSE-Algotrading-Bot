@@ -50,3 +50,15 @@ From there, you can use the **Accounts** tab in the dashboard to add and switch 
 
 ---
 *Disclaimer: This software is for educational and algorithmic testing purposes. Use on live accounts at your own risk.*
+
+
+## Vario Nandan's RLSE TradingView Indicator
+The repository also includes the custom-built **Vario Nandan's RLSE Indicator** (`RLSE_Indicator.pine`) for TradingView. This indicator visually maps out the advanced algorithmic logic directly on your charts, drawing precise execution boxes, SL/TP levels, and real-time accuracy statistics. It is specifically optimized for the **1-minute timeframe**.
+
+### How to Apply the Indicator:
+1. Open [TradingView](https://www.tradingview.com/) and navigate to your desired chart (e.g., XAUUSD or BTCUSD) on the **1m timeframe**.
+2. Click on the **Pine Editor** tab at the bottom of the screen.
+3. Delete any existing code in the editor.
+4. Open the `RLSE_Indicator.pine` file from this repository, copy all the code, and paste it into the Pine Editor.
+5. Click the **Save** button in the Pine Editor, name the script, and then click **Add to Chart**.
+6. The indicator will instantly overlay onto your chart. You can customize visual colors, SL buffer types, and RR ratios by clicking the settings gear icon next to the indicator name on your chart.
