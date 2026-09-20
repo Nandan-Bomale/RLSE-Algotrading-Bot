@@ -20,8 +20,8 @@ An advanced, fully autonomous algorithmic trading system integrated directly wit
 ### 1. Clone the Repository
 Download the project to your local machine:
 ```bash
-git clone https://github.com/Nandan-Bomale/LiquiditySweepBot.git
-cd LiquiditySweepBot
+git clone https://github.com/Nandan-Bomale/RLSE-Algotrading-Bot.git
+cd RLSE-Algotrading-Bot
 ```
 
 ### 2. Install Dependencies
