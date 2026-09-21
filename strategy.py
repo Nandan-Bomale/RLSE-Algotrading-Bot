@@ -1,12 +1,15 @@
 class SweepStrategy:
-    def __init__(self, symbol, pdh, pdl, sl_buffer):
+    def __init__(self, symbol, true_pdh, true_pdl, active_high, active_low, sl_buffer):
         self.symbol = symbol
         
-        # Initial Targets (Passed from main.py, already accounts for today's highs)
-        self.pdh = pdh
-        self.pdl = pdl
-        self.active_high_target = pdh
-        self.active_low_target = pdl
+        # Store true PDH/PDL for dashboard display
+        self.pdh = true_pdh
+        self.pdl = true_pdl
+        
+        # Active targets which could be today's high if already broken
+        self.active_high_target = active_high
+        self.active_low_target = active_low
+        
         self.sl_buffer = sl_buffer
         
         # Sweep State Tracking

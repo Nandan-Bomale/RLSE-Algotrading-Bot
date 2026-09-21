@@ -81,7 +81,7 @@ def main():
                 active_low = pdl
                 
             print(f"[{symbol}] Initialized. PDH: {pdh} | PDL: {pdl} | Active High Target: {active_high} | Active Low Target: {active_low}")
-            active_strategies[symbol] = SweepStrategy(symbol, active_high, active_low, params['sl_buffer'])
+            active_strategies[symbol] = SweepStrategy(symbol, pdh, pdl, active_high, active_low, params['sl_buffer'])
 
     if not active_strategies:
         print("No active symbols configured or loaded. Exiting...")
@@ -93,6 +93,27 @@ def main():
     # 4. Main Loop
     try:
         while True:
+            # Check for Account Switch
+            if server.SHARED_STATE.get("account_switched"):
+                print("\n[SYSTEM] Account switch detected! Resetting strategy states...")
+                server.SHARED_STATE["account_switched"] = False
+                active_strategies = {}
+                for symbol, config in SYMBOLS.items():
+                    if config["enabled"]:
+                        dh, dl = mt5_engine.get_daily_high_low(symbol)
+                        if dh is not None and dl is not None:
+                            # Quick fetch of today's high/low
+                            today_rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_D1, 0, 1)
+                            ah, al = dh, dl
+                            if today_rates is not None and len(today_rates) > 0:
+                                th = today_rates[0]['high']
+                                tl = today_rates[0]['low']
+                                ah = th if th > dh else dh
+                                al = tl if tl < dl else dl
+                            active_strategies[symbol] = SweepStrategy(symbol, dh, dl, ah, al, config["sl_buffer"])
+                print("[SYSTEM] Strategies reset. Resuming trading.\n")
+                continue
+
             for symbol, strategy in active_strategies.items():
                 # Get current bid/ask for sweep tracking
                 tick = mt5.symbol_info_tick(symbol)

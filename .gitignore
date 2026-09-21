@@ -5,3 +5,5 @@ __pycache__/
 config.py
 journal.csv
 settings.json
+
+accounts.json
