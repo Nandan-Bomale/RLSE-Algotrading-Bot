@@ -263,18 +263,28 @@ def execute_trades_for_signal(symbol, signal, config):
     print(f"Entry: {entry_price} | SL: {sl}")
     print(f"TP1: {tp1} | TP2: {tp2} | TP3: {tp3}")
     
+    # Divide lot size among 3 trades
+    lot1 = round(lot_size / 3.0, 2)
+    lot2 = round(lot_size / 3.0, 2)
+    lot3 = round(lot_size - lot1 - lot2, 2)
+    
+    # Ensure minimum lot size (usually 0.01) just in case
+    if lot1 <= 0: lot1 = 0.01
+    if lot2 <= 0: lot2 = 0.01
+    if lot3 <= 0: lot3 = 0.01
+
     # Open 3 separate positions
     trades = [
-        {"name": "TP1", "tp": tp1},
-        {"name": "TP2", "tp": tp2},
-        {"name": "TP3", "tp": tp3}
+        {"name": "TP1", "tp": tp1, "lot": lot1},
+        {"name": "TP2", "tp": tp2, "lot": lot2},
+        {"name": "TP3", "tp": tp3, "lot": lot3}
     ]
     
     for t in trades:
         res = mt5_engine.execute_trade(
             symbol=symbol,
             order_type=order_type,
-            lots=lot_size,
+            lots=t['lot'],
             sl=sl,
             tp=t['tp'],
             magic=magic,
