@@ -159,8 +159,19 @@ def main():
                     "sweep_low_active": strategy.sweep_low_active
                 }
                 
-                if signal:
+                # Check if we are already in a trade for this symbol
+                open_pos = mt5.positions_get(symbol=symbol)
+                in_trade = False
+                if open_pos:
+                    for p in open_pos:
+                        if p.magic == SYMBOLS[symbol]["magic_number"]:
+                            in_trade = True
+                            break
+                            
+                if signal and not in_trade:
                     execute_trades_for_signal(symbol, signal, SYMBOLS[symbol])
+                elif signal and in_trade:
+                    print(f"[{symbol}] ⚠️ Signal generated but IGNORED (Trade already active for this symbol)!")
                     
 
             # Manage trailing stops and break evens
