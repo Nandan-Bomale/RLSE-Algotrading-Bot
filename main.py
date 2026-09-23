@@ -188,29 +188,33 @@ def manage_open_trades():
         
         trail_amount = config.get("trail", 12.5)
         
+        # Determine if TP1 has been closed (hit)
+        # If there are TP2 or TP3 positions, but no TP1 position, TP1 is hit.
+        has_tp2_or_tp3 = any(p.comment in ["Sweep TP2", "Sweep TP3"] for p in our_pos)
+        tp1_open = any(p.comment == "Sweep TP1" for p in our_pos)
+        tp1_hit = has_tp2_or_tp3 and not tp1_open
+        
         for p in our_pos:
             is_buy = p.type == mt5.ORDER_TYPE_BUY
             
-            # Check Break Even
+            # Check Break Even (ONLY IF TP1 IS HIT)
             if p.comment in ["Sweep TP2", "Sweep TP3"]:
-                if (is_buy and p.sl < p.price_open) or (not is_buy and p.sl > p.price_open):
-                    risk = abs(p.price_open - p.sl)
-                    current_profit_dist = (p.price_current - p.price_open) if is_buy else (p.price_open - p.price_current)
-                    
-                    if risk > 0 and current_profit_dist >= risk:
-                        print(f"[{symbol}] TP1 Hit / 1R Reached! Moving {p.comment} to Break-Even!")
+                if tp1_hit:
+                    # Move to BE if not already at BE or better
+                    if (is_buy and p.sl < p.price_open) or (not is_buy and p.sl > p.price_open):
+                        print(f"[{symbol}] TP1 Hit! Moving {p.comment} to Break-Even!")
                         mt5_engine.modify_position(symbol, p.ticket, p.price_open)
                         
-            # Check Trailing Stop for TP3
-            if p.comment == "Sweep TP3":
+            # Check Trailing Stop for TP3 (ONLY AFTER TP1 IS HIT)
+            if p.comment == "Sweep TP3" and tp1_hit:
                 if is_buy:
                     new_sl = p.price_current - trail_amount
-                    if new_sl > p.sl and new_sl > p.price_open:
+                    if new_sl > p.sl and new_sl >= p.price_open:
                         print(f"[{symbol}] Trailing TP3 SL up to {new_sl}!")
                         mt5_engine.modify_position(symbol, p.ticket, new_sl)
                 else:
                     new_sl = p.price_current + trail_amount
-                    if (new_sl < p.sl or p.sl == 0.0) and new_sl < p.price_open:
+                    if (new_sl < p.sl or p.sl == 0.0) and new_sl <= p.price_open:
                         print(f"[{symbol}] Trailing TP3 SL down to {new_sl}!")
                         mt5_engine.modify_position(symbol, p.ticket, new_sl)
 

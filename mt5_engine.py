@@ -78,14 +78,20 @@ def modify_position(symbol, ticket, new_sl):
     pos = mt5.positions_get(ticket=ticket)
     if not pos: return False
     
+    # Normalize sl to symbol digits
+    info = mt5.symbol_info(symbol)
+    if info:
+        new_sl = round(new_sl, info.digits)
+        
     request = {
         "action": mt5.TRADE_ACTION_SLTP,
         "symbol": symbol,
-        "sl": new_sl,
+        "sl": float(new_sl),
+        "tp": pos[0].tp,
         "position": ticket,
-        "magic": pos[0].magic
     }
     result = mt5.order_send(request)
     if result and result.retcode == mt5.TRADE_RETCODE_DONE:
         return True
+    print(f"Modify failed! Retcode: {result.retcode if result else 'None'}")
     return False
