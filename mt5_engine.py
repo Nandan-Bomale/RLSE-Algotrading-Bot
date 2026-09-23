@@ -73,3 +73,19 @@ def execute_trade(symbol, order_type, lots, sl, tp, magic, comment="RLSE Algo"):
         print(f"Order failed for {symbol}: {result.comment} (Code: {result.retcode})")
     
     return result
+
+def modify_position(symbol, ticket, new_sl):
+    pos = mt5.positions_get(ticket=ticket)
+    if not pos: return False
+    
+    request = {
+        "action": mt5.TRADE_ACTION_SLTP,
+        "symbol": symbol,
+        "sl": new_sl,
+        "position": ticket,
+        "magic": pos[0].magic
+    }
+    result = mt5.order_send(request)
+    if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+        return True
+    return False

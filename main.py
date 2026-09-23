@@ -141,6 +141,8 @@ def main():
                         SYMBOLS[symbol]["tp2"] = new_params["tp2"]
                     if "tp3" in new_params:
                         SYMBOLS[symbol]["tp3"] = new_params["tp3"]
+                    if "trail" in new_params:
+                        SYMBOLS[symbol]["trail"] = new_params["trail"]
                     del server.SHARED_STATE["updates"][symbol]
                     print(f"[{symbol}] ⚙️ Live parameters updated: SL Buffer = {strategy.sl_buffer}, Lot Size = {SYMBOLS[symbol]['lot_size']}")
 
@@ -160,6 +162,10 @@ def main():
                 if signal:
                     execute_trades_for_signal(symbol, signal, SYMBOLS[symbol])
                     
+
+            # Manage trailing stops and break evens
+            manage_open_trades()
+            
             # Wait 1 second before checking again
             time.sleep(1)
             
@@ -167,6 +173,47 @@ def main():
         print("\nBot stopped by user.")
     finally:
         mt5.shutdown()
+
+
+def manage_open_trades():
+    for symbol, config in SYMBOLS.items():
+        if not config.get("enabled"): continue
+        magic = config.get("magic_number")
+        
+        positions = mt5.positions_get(symbol=symbol)
+        if not positions: continue
+        
+        our_pos = [p for p in positions if p.magic == magic]
+        if not our_pos: continue
+        
+        trail_amount = config.get("trail", 12.5)
+        
+        for p in our_pos:
+            is_buy = p.type == mt5.ORDER_TYPE_BUY
+            
+            # Check Break Even
+            if p.comment in ["Sweep TP2", "Sweep TP3"]:
+                if (is_buy and p.sl < p.price_open) or (not is_buy and p.sl > p.price_open):
+                    risk = abs(p.price_open - p.sl)
+                    current_profit_dist = (p.price_current - p.price_open) if is_buy else (p.price_open - p.price_current)
+                    
+                    if risk > 0 and current_profit_dist >= risk:
+                        print(f"[{symbol}] TP1 Hit / 1R Reached! Moving {p.comment} to Break-Even!")
+                        mt5_engine.modify_position(symbol, p.ticket, p.price_open)
+                        
+            # Check Trailing Stop for TP3
+            if p.comment == "Sweep TP3":
+                if is_buy:
+                    new_sl = p.price_current - trail_amount
+                    if new_sl > p.sl and new_sl > p.price_open:
+                        print(f"[{symbol}] Trailing TP3 SL up to {new_sl}!")
+                        mt5_engine.modify_position(symbol, p.ticket, new_sl)
+                else:
+                    new_sl = p.price_current + trail_amount
+                    if (new_sl < p.sl or p.sl == 0.0) and new_sl < p.price_open:
+                        print(f"[{symbol}] Trailing TP3 SL down to {new_sl}!")
+                        mt5_engine.modify_position(symbol, p.ticket, new_sl)
+
 
 def execute_trades_for_signal(symbol, signal, config):
     action = signal['action']

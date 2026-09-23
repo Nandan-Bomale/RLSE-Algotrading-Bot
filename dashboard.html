@@ -3145,6 +3145,7 @@ async function loadSettings() {
             if(data['GOLD.i#'].tp1 !== undefined) document.getElementById('gold-tp1').value = data['GOLD.i#'].tp1;
             if(data['GOLD.i#'].tp2 !== undefined) document.getElementById('gold-tp2').value = data['GOLD.i#'].tp2;
             if(data['GOLD.i#'].tp3 !== undefined) document.getElementById('gold-tp3').value = data['GOLD.i#'].tp3;
+            if(data['GOLD.i#'].trail !== undefined) document.getElementById('gold-trail').value = data['GOLD.i#'].trail;
         }
         if (data['BTCUSD#']) {
             if(data['BTCUSD#'].sl_buffer !== undefined) document.getElementById('btc-sl').value = data['BTCUSD#'].sl_buffer;
@@ -3152,6 +3153,7 @@ async function loadSettings() {
             if(data['BTCUSD#'].tp1 !== undefined) document.getElementById('btc-tp1').value = data['BTCUSD#'].tp1;
             if(data['BTCUSD#'].tp2 !== undefined) document.getElementById('btc-tp2').value = data['BTCUSD#'].tp2;
             if(data['BTCUSD#'].tp3 !== undefined) document.getElementById('btc-tp3').value = data['BTCUSD#'].tp3;
+            if(data['BTCUSD#'].trail !== undefined) document.getElementById('btc-trail').value = data['BTCUSD#'].trail;
         }
     } catch(e) {
         console.error("Failed to load settings:", e);
@@ -3170,18 +3172,20 @@ async function saveNewSettings() {
     const g_tp1 = parseFloat(document.getElementById('gold-tp1').value);
     const g_tp2 = parseFloat(document.getElementById('gold-tp2').value);
     const g_tp3 = parseFloat(document.getElementById('gold-tp3').value);
+    const g_trail = parseFloat(document.getElementById('gold-trail').value);
     
     const b_tp1 = parseFloat(document.getElementById('btc-tp1').value);
     const b_tp2 = parseFloat(document.getElementById('btc-tp2').value);
     const b_tp3 = parseFloat(document.getElementById('btc-tp3').value);
+    const b_trail = parseFloat(document.getElementById('btc-trail').value);
     
     try {
         const res = await fetch('/api/update_settings', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                'GOLD.i#': { sl_buffer: goldSl, lot_size: goldLot, tp1: g_tp1, tp2: g_tp2, tp3: g_tp3 },
-                'BTCUSD#': { sl_buffer: btcSl, lot_size: btcLot, tp1: b_tp1, tp2: b_tp2, tp3: b_tp3 }
+                'GOLD.i#': { sl_buffer: goldSl, lot_size: goldLot, tp1: g_tp1, tp2: g_tp2, tp3: g_tp3, trail: g_trail },
+                'BTCUSD#': { sl_buffer: btcSl, lot_size: btcLot, tp1: b_tp1, tp2: b_tp2, tp3: b_tp3, trail: b_trail }
             })
         });
         const data = await res.json();
